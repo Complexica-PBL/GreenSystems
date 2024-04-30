@@ -15,6 +15,29 @@ BH1750 lightMeter;
 
 int air_sensorValue;
 
+
+
+#include <SoftwareSerial.h>
+
+// RX and TX pins connected to the DT-06 module
+SoftwareSerial espSerial(2, 3); // RX, TX
+
+String host = "192.168.0.1"; // IP of the localhost
+int port = 3001; // Port number
+
+String wifi_name= "wifi123";
+String wifi_pass= "123456789";
+
+// Forward declaration of functions
+void sendCommand(String command, const int timeout);
+void sendJsonData(String jsonData);
+
+
+
+int send_mess_temp_var_cicle = 3;
+int send_mess_temp_var = 0;
+
+
 const int buzzer = 14;  //buzzer to arduino pin 9
 
 #define sensorPower 17
@@ -35,6 +58,7 @@ int water_readSensor() {
 
 void setup() {
   Serial.begin(9600);
+  espSerial.begin(9600);
   Serial.print("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
   Serial.println("© GreenSystems | UTM PBL spring 2024");
   delay(1000);
@@ -73,6 +97,15 @@ void setup() {
   Wire.begin();
 
   lightMeter.begin();
+
+
+  // Setup WiFi connection
+  sendCommand("AT+RST\r\n", 5000); // Reset module
+  sendCommand("AT+CWMODE=1\r\n", 2000); // Set mode to STA
+  sendCommand("AT+CWJAP=\"" + wifi_name + "\",\"" + wifi_pass + "\"\r\n", 5000); // Connect to WiFi using variables
+  sendCommand("AT+CIPMUX=1\r\n", 2000); // Enable multiple connections
+  sendCommand("AT+CIPSTART=0,\"TCP\",\"" + host + "\"," + String(port) + "\r\n", 5000); // Start TCP connection
+
 }
 
 boolean any_module_connected = false;
@@ -202,10 +235,61 @@ void loop() {
   Serial.print(air_sensorValue, DEC); // Prints the value read
   Serial.println(" PPM");
 
+
+
   }
 
 
 
 
+send_mess_temp_var++;
+      if (send_mess_temp_var == send_mess_temp_var_cicle) {
+       // Construct the JSON data string
+    String jsonData = "{\"system\":\"GreenSystemsHome\",\"hardwareID\":\"000000001\",\"postID\":\"0000000000001\",\"data\":{\"temp\":10,\"humidity\":200,\"light\":200,\"water\":true,\"air\":180,\"UV\":20},\"portsActive\":1,\"port1\":{\"soilHumidity\":150,\"plant\":\"orchid\",\"lastWatered\":\"16.04.2024 6:00\",\"salt\":20,\"ph\":12,\"error\":\"none\"}}";
+
+    // Send the JSON data
+    sendJsonData(jsonData);
+
+
+     // Check if the module sends any messages
+  if (espSerial.available()) {
+    Serial.write(espSerial.read());
+  }
+
+       
+        send_mess_temp_var = 0;
+      }
+
+
+
+      
+
+
+
   delay(2000);
+}
+
+
+
+void sendCommand(String command, const int timeout) {
+  Serial.print("Sending: ");
+  Serial.print(command);
+  espSerial.print(command); // Send the command to the ESP module
+  
+  long int time = millis();
+  while ((time + timeout) > millis()) {
+    while (espSerial.available()) {
+      char c = espSerial.read(); // read the next character.
+      Serial.write(c);
+    }
+  }
+  Serial.println();
+}
+
+void sendJsonData(String jsonData) {
+  String cipSend = "AT+CIPSEND=0," + String(jsonData.length()) + "\r\n";
+  sendCommand(cipSend, 2000); // Prepare to send data
+
+  delay(100); // Wait a little for the '>' prompt
+  sendCommand(jsonData, 2000); // Send the actual JSON data
 }
