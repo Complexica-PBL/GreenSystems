@@ -120,7 +120,7 @@ void loop() {
 
 
     module_1_soil = analogRead(A15);
-    Serial.print("  -- Module [1] soil= ");
+    Serial.print("  -- Module [1] soil - ");
     Serial.println(module_1_soil);
 
 
@@ -172,6 +172,9 @@ void loop() {
       Serial.print("  -- Temperature: ");
       Serial.print(t);
       Serial.println(" *C");
+       Serial.print("  -- Light: ");
+      Serial.print("tbd");
+      Serial.println("day, not enoth light");
     }
   }
 
