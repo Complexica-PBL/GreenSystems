@@ -8,12 +8,16 @@ int module_1_count_water_cicle = 3;
 int module_1_count_water_cicle_counted = 0;
 int module_1_soil;
 
+#include <Wire.h>
+#include <BH1750.h>
 
+BH1750 lightMeter;
 
+int air_sensorValue;
 
 const int buzzer = 14;  //buzzer to arduino pin 9
 
-#define sensorPower 18
+#define sensorPower 17
 #define sensorPin A8
 int water_val = 0;
 
@@ -62,7 +66,13 @@ void setup() {
   // Set to LOW so no power flows through the sensor
   digitalWrite(sensorPower, LOW);
 
+   digitalWrite(RELAY_PIN_1, HIGH);
+
   pinMode(buzzer, OUTPUT);  // Set buzzer - pin 9 as an output
+
+  Wire.begin();
+
+  lightMeter.begin();
 }
 
 boolean any_module_connected = false;
@@ -77,6 +87,7 @@ void loop() {
 
   digitalWrite(RELAY_PIN_1, HIGH);
   if (!any_module_connected) {
+     
     Serial.println("Searching for modules...");
   }
   Serial.println("---------------------------------------");
@@ -92,6 +103,7 @@ void loop() {
 
     int water_sensor_level_module_1 = water_readSensor();
     while (water_sensor_level_module_1 < 50) {  // Loop will continue if no water is detected
+      digitalWrite(RELAY_PIN_1, HIGH);
       Serial.println("---------------------------------------");
       Serial.println("ALERT [no water]");  // Print alert message
       tone(buzzer, 1000);                  // Send 1KHz sound signal...
@@ -124,7 +136,7 @@ void loop() {
     Serial.println(module_1_soil);
 
 
-
+ digitalWrite(RELAY_PIN_1, HIGH);
     if (module_1_soil < 700) {
       module_1_count_water_cicle_counted++;
       if (module_1_count_water_cicle_counted == module_1_count_water_cicle) {
@@ -172,11 +184,28 @@ void loop() {
       Serial.print("  -- Temperature: ");
       Serial.print(t);
       Serial.println(" *C");
-       Serial.print("  -- Light: ");
-      Serial.print("tbd");
-      Serial.println("day, not enoth light");
+      
+
+
+
     }
+
+
+      float lux = lightMeter.readLightLevel();
+   Serial.print("  -- Light: ");
+  Serial.print(lux);
+  Serial.println(" lx");
+
+
+  air_sensorValue = analogRead(0); // Read analog input pin 0
+  Serial.print("  -- Air Quality : ");
+  Serial.print(air_sensorValue, DEC); // Prints the value read
+  Serial.println(" PPM");
+
   }
+
+
+
 
   delay(2000);
 }
