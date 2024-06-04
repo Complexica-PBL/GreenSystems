@@ -15,24 +15,30 @@ BH1750 lightMeter;
 
 int air_sensorValue;
 
+// Global variable
+int lux_global;
+int hum_global;
+int temp_global;
+bool water_global;
+int air_global;
+
+
+
+
 
 
 #include <SoftwareSerial.h>
+#include "WiFiEsp.h"
+#include "WiFiEspClient.h"
+#include <ArduinoJson.h>
 
-// RX and TX pins connected to the DT-06 module
-SoftwareSerial espSerial(2, 3); // RX, TX
+const char* ssid = "Cristian’s iPhone 11 Pro Max";
+const char* password = "multevrei";
 
-String host = "192.168.0.1"; // IP of the localhost
-int port = 3001; // Port number
-
-String wifi_name= "wifi123";
-String wifi_pass= "123456789";
-
-// Forward declaration of functions
-void sendCommand(String command, const int timeout);
-void sendJsonData(String jsonData);
-
-
+char server[] = "172.20.10.4";
+int port = 5004;
+const char* route = "receive";
+WiFiEspClient client;
 
 int send_mess_temp_var_cicle = 3;
 int send_mess_temp_var = 0;
@@ -58,7 +64,6 @@ int water_readSensor() {
 
 void setup() {
   Serial.begin(9600);
-  espSerial.begin(9600);
   Serial.print("\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n");
   Serial.println("© GreenSystems | UTM PBL spring 2024");
   delay(1000);
@@ -98,13 +103,11 @@ void setup() {
 
   lightMeter.begin();
 
+ Serial.begin(115200);
 
-  // Setup WiFi connection
-  sendCommand("AT+RST\r\n", 5000); // Reset module
-  sendCommand("AT+CWMODE=1\r\n", 2000); // Set mode to STA
-  sendCommand("AT+CWJAP=\"" + wifi_name + "\",\"" + wifi_pass + "\"\r\n", 5000); // Connect to WiFi using variables
-  sendCommand("AT+CIPMUX=1\r\n", 2000); // Enable multiple connections
-  sendCommand("AT+CIPSTART=0,\"TCP\",\"" + host + "\"," + String(port) + "\r\n", 5000); // Start TCP connection
+  // Initialize serial for ESP-01 (TX1/RX1 on Mega)
+  Serial1.begin(115200);
+  WiFi.init(&Serial1);
 
 }
 
@@ -139,6 +142,8 @@ void loop() {
       digitalWrite(RELAY_PIN_1, HIGH);
       Serial.println("---------------------------------------");
       Serial.println("ALERT [no water]");  // Print alert message
+
+      water_global=false;
       tone(buzzer, 1000);                  // Send 1KHz sound signal...
       delay(50);
       noTone(buzzer);
@@ -149,7 +154,7 @@ void loop() {
       delay(4000);                                       // Wait for a second before checking again
       water_sensor_level_module_1 = water_readSensor();  // Re-read the water sensor level
     }
-
+water_global=true;
 
     Serial.print("  -- Module [1] Water level ");
     if (water_sensor_level_module_1 < 200) {
@@ -210,12 +215,16 @@ void loop() {
 
     if (isnan(t) || isnan(h)) {
       Serial.println("Failed to read from DHT");
+      temp_global=0;
+       hum_global=0;
     } else {
       Serial.print("  -- Humidity: ");
       Serial.print(h);
+      hum_global = h;
       Serial.println();
       Serial.print("  -- Temperature: ");
       Serial.print(t);
+      temp_global = t;
       Serial.println(" *C");
       
 
@@ -227,11 +236,13 @@ void loop() {
       float lux = lightMeter.readLightLevel();
    Serial.print("  -- Light: ");
   Serial.print(lux);
+  lux_global = (int)lux;
   Serial.println(" lx");
 
 
   air_sensorValue = analogRead(0); // Read analog input pin 0
   Serial.print("  -- Air Quality : ");
+   air_global = (int)air_sensorValue;
   Serial.print(air_sensorValue, DEC); // Prints the value read
   Serial.println(" PPM");
 
@@ -245,16 +256,27 @@ void loop() {
 send_mess_temp_var++;
       if (send_mess_temp_var == send_mess_temp_var_cicle) {
        // Construct the JSON data string
-    String jsonData = "{\"system\":\"GreenSystemsHome\",\"hardwareID\":\"000000001\",\"postID\":\"0000000000001\",\"data\":{\"temp\":10,\"humidity\":200,\"light\":200,\"water\":true,\"air\":180,\"UV\":20},\"portsActive\":1,\"port1\":{\"soilHumidity\":150,\"plant\":\"orchid\",\"lastWatered\":\"16.04.2024 6:00\",\"salt\":20,\"ph\":12,\"error\":\"none\"}}";
+    //String jsonData = "{\"system\":\"GreenSystemsHome\",\"hardwareID\":\"000000001\",\"postID\":\"0000000000001\",\"data\":{\"temp\":10,\"humidity\":200,\"light\":200,\"water\":true,\"air\":180,\"UV\":20},\"portsActive\":1,\"port1\":{\"soilHumidity\":150,\"plant\":\"orchid\",\"lastWatered\":\"16.04.2024 6:00\",\"salt\":20,\"ph\":12,\"error\":\"none\"}}";
 
-    // Send the JSON data
-    sendJsonData(jsonData);
-
-
-     // Check if the module sends any messages
-  if (espSerial.available()) {
-    Serial.write(espSerial.read());
+     // Check for the presence of the shield
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi shield not present");
+    while (true); // don't continue
   }
+
+  // Attempt to connect to Wi-Fi network
+  Serial.print("Attempting to connect to SSID: ");
+  Serial.println(ssid);
+  while (WiFi.status() != WL_CONNECTED) {
+    WiFi.begin(ssid, password);
+    delay(10000); // wait 10 seconds for connection
+  }
+
+  Serial.println("Connected to Wi-Fi");
+  printWifiStatus();
+
+  // Send JSON payload to server
+  sendJsonPayload();
 
        
         send_mess_temp_var = 0;
@@ -271,25 +293,70 @@ send_mess_temp_var++;
 
 
 
-void sendCommand(String command, const int timeout) {
-  Serial.print("Sending: ");
-  Serial.print(command);
-  espSerial.print(command); // Send the command to the ESP module
-  
-  long int time = millis();
-  while ((time + timeout) > millis()) {
-    while (espSerial.available()) {
-      char c = espSerial.read(); // read the next character.
-      Serial.write(c);
-    }
-  }
-  Serial.println();
+void printWifiStatus() {
+  // Print the SSID of the network you're attached to
+  Serial.print("SSID: ");
+  Serial.println(WiFi.SSID());
+
+  // Print your Wi-Fi shield's IP address
+  IPAddress ip = WiFi.localIP();
+  Serial.print("IP Address: ");
+  Serial.println(ip);
 }
 
-void sendJsonData(String jsonData) {
-  String cipSend = "AT+CIPSEND=0," + String(jsonData.length()) + "\r\n";
-  sendCommand(cipSend, 2000); // Prepare to send data
+void sendJsonPayload() {
+  if (client.connect(server, port)) {
+    Serial.println("Connected to server");
 
-  delay(100); // Wait a little for the '>' prompt
-  sendCommand(jsonData, 2000); // Send the actual JSON data
+ // Create JSON object
+    StaticJsonDocument<512> jsonDoc;
+    jsonDoc["system"] = "GreenSystemsHome";
+    jsonDoc["hardwareID"] = "000000001";
+    jsonDoc["postID"] = "0000000000001";
+    JsonObject data = jsonDoc.createNestedObject("data");
+    data["temp"] = temp_global;
+    data["humidity"] = hum_global;
+    data["light"] = lux_global;
+    data["water"] = true;
+    data["air"] = air_global;
+    data["UV"] = 20;
+    jsonDoc["portsActive"] = 1;
+    JsonObject port1 = jsonDoc.createNestedObject("port1");
+    port1["soilHumidity"] = 150;
+    port1["plant"] = "orchid";
+    port1["lastWatered"] = "16.04.2024 6:00";
+    port1["salt"] = 20;
+    port1["ph"] = 12;
+    port1["error"] = "none";
+
+
+    // Serialize JSON to string
+    String jsonString;
+    serializeJson(jsonDoc, jsonString);
+
+    // Send HTTP POST request
+    client.print("POST /");
+    client.print(route);
+    client.println(" HTTP/1.1");
+    client.println("Host: 172.18.14.146");
+    client.println("Content-Type: application/json");
+    client.print("Content-Length: ");
+    client.println(jsonString.length());
+    client.println();
+    client.println(jsonString);
+
+    // Wait for server response
+    while (client.connected()) {
+      if (client.available()) {
+        String line = client.readStringUntil('\r');
+        Serial.print(line);
+      }
+    }
+
+    // Disconnect from server
+    client.stop();
+    Serial.println("\nDisconnected from server");
+  } else {
+    Serial.println("Connection to server failed");
+  }
 }
