@@ -21,6 +21,7 @@ int hum_global;
 int temp_global;
 bool water_global;
 int air_global;
+int water_count=0;
 
 
 
@@ -39,6 +40,11 @@ char server[] = "172.20.10.4";
 int port = 5004;
 const char* route = "receive";
 WiFiEspClient client;
+
+char newServer[] = "172.20.10.4";
+int newPort = 5005;
+const char* newRoute = "telegram";
+WiFiEspClient newClient;
 
 int send_mess_temp_var_cicle = 3;
 int send_mess_temp_var = 0;
@@ -142,6 +148,11 @@ void loop() {
       digitalWrite(RELAY_PIN_1, HIGH);
       Serial.println("---------------------------------------");
       Serial.println("ALERT [no water]");  // Print alert message
+      if(water_count==10){
+         sendJsonPayload(newServer, newPort, newRoute, createTelegramJsonPayload("! [Alert] - No water, please refill"));
+         water_count=0;
+      }
+      water_count++;
 
       water_global=false;
       tone(buzzer, 1000);                  // Send 1KHz sound signal...
@@ -275,8 +286,10 @@ send_mess_temp_var++;
   Serial.println("Connected to Wi-Fi");
   printWifiStatus();
 
-  // Send JSON payload to server
-  sendJsonPayload();
+  // Send JSON payloads to servers
+    sendJsonPayload(server, port, route, createJsonData());
+   
+
 
        
         send_mess_temp_var = 0;
@@ -304,41 +317,54 @@ void printWifiStatus() {
   Serial.println(ip);
 }
 
-void sendJsonPayload() {
+String createJsonData() {
+  StaticJsonDocument<512> jsonDoc;
+  jsonDoc["system"] = "GreenSystemsHome";
+  jsonDoc["hardwareID"] = "000000001";
+  jsonDoc["postID"] = "0000000000001";
+  JsonObject data = jsonDoc.createNestedObject("data");
+  data["temp"] = temp_global;
+  data["humidity"] = hum_global;
+  data["light"] = lux_global;
+  data["water"] = true;
+  data["air"] = air_global;
+  data["UV"] = 20;
+  jsonDoc["portsActive"] = 1;
+  JsonObject port1 = jsonDoc.createNestedObject("port1");
+  port1["soilHumidity"] = 150;
+  port1["plant"] = "orchid";
+  port1["lastWatered"] = "16.04.2024 6:00";
+  port1["salt"] = 20;
+  port1["ph"] = 12;
+  port1["error"] = "none";
+
+  // Serialize JSON to string
+  String jsonString;
+  serializeJson(jsonDoc, jsonString);
+  return jsonString;
+}
+
+String createTelegramJsonPayload(String tg_mesage) {
+  StaticJsonDocument<128> jsonDoc;
+  jsonDoc["tg_message"] = tg_mesage;
+
+  // Serialize JSON to string
+  String jsonString;
+  serializeJson(jsonDoc, jsonString);
+  return jsonString;
+}
+
+void sendJsonPayload(const char* server, int port, const char* route, String jsonString) {
+  WiFiEspClient client;
   if (client.connect(server, port)) {
     Serial.println("Connected to server");
-
- // Create JSON object
-    StaticJsonDocument<512> jsonDoc;
-    jsonDoc["system"] = "GreenSystemsHome";
-    jsonDoc["hardwareID"] = "000000001";
-    jsonDoc["postID"] = "0000000000001";
-    JsonObject data = jsonDoc.createNestedObject("data");
-    data["temp"] = temp_global;
-    data["humidity"] = hum_global;
-    data["light"] = lux_global;
-    data["water"] = true;
-    data["air"] = air_global;
-    data["UV"] = 20;
-    jsonDoc["portsActive"] = 1;
-    JsonObject port1 = jsonDoc.createNestedObject("port1");
-    port1["soilHumidity"] = 150;
-    port1["plant"] = "orchid";
-    port1["lastWatered"] = "16.04.2024 6:00";
-    port1["salt"] = 20;
-    port1["ph"] = 12;
-    port1["error"] = "none";
-
-
-    // Serialize JSON to string
-    String jsonString;
-    serializeJson(jsonDoc, jsonString);
 
     // Send HTTP POST request
     client.print("POST /");
     client.print(route);
     client.println(" HTTP/1.1");
-    client.println("Host: 172.18.14.146");
+    client.print("Host: ");
+    client.println(server);
     client.println("Content-Type: application/json");
     client.print("Content-Length: ");
     client.println(jsonString.length());
