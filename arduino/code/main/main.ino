@@ -23,31 +23,40 @@ bool water_global;
 int air_global;
 int water_count=0;
 
-
-
-
-
-
 #include <SoftwareSerial.h>
 #include "WiFiEsp.h"
 #include "WiFiEspClient.h"
 #include <ArduinoJson.h>
 
-const char* ssid = "Cristian’s iPhone 11 Pro Max";
-const char* password = "multevrei";
 
-char server[] = "172.20.10.4";
+//-------------------------------------------------------
+//for developers
+
+//const char* ssid = "Cristian’s iPhone 11 Pro Max";
+//const char* password = "multevrei";
+
+const char* ssid = "Acasa";
+const char* password = "069257525";
+
+
+
+char server[] = "192.168.0.80";
 int port = 5004;
 const char* route = "receive";
 WiFiEspClient client;
 
-char newServer[] = "172.20.10.4";
+char newServer[] = "192.168.0.80";
 int newPort = 5005;
 const char* newRoute = "telegram";
 WiFiEspClient newClient;
 
+
+
 int send_mess_temp_var_cicle = 3;
 int send_mess_temp_var = 0;
+int water_count_cicles=5;
+
+//-------------------------------------------------------
 
 
 const int buzzer = 14;  //buzzer to arduino pin 9
@@ -115,6 +124,25 @@ void setup() {
   Serial1.begin(115200);
   WiFi.init(&Serial1);
 
+
+ // Check for the presence of the shield
+  if (WiFi.status() == WL_NO_SHIELD) {
+    Serial.println("WiFi shield not present");
+    while (true); // don't continue
+  }
+
+  // Attempt to connect to Wi-Fi network
+  Serial.print("Attempting to connect to SSID: ");
+  Serial.println(ssid);
+  while (WiFi.status() != WL_CONNECTED) {
+    WiFi.begin(ssid, password);
+    delay(10000); // wait 10 seconds for connection
+  }
+
+  Serial.println("Connected to Wi-Fi");
+  printWifiStatus();
+
+   sendTelegramJsonPayload("[Notification] - Succes, device connected");
 }
 
 boolean any_module_connected = false;
@@ -148,8 +176,8 @@ void loop() {
       digitalWrite(RELAY_PIN_1, HIGH);
       Serial.println("---------------------------------------");
       Serial.println("ALERT [no water]");  // Print alert message
-      if(water_count==10){
-         sendJsonPayload(newServer, newPort, newRoute, createTelegramJsonPayload("! [Alert] - No water, please refill"));
+if(water_count==water_count_cicles-1){
+         sendTelegramJsonPayload("[Alert] - No water, please refill");
          water_count=0;
       }
       water_count++;
@@ -266,30 +294,11 @@ water_global=true;
 
 send_mess_temp_var++;
       if (send_mess_temp_var == send_mess_temp_var_cicle) {
-       // Construct the JSON data string
-    //String jsonData = "{\"system\":\"GreenSystemsHome\",\"hardwareID\":\"000000001\",\"postID\":\"0000000000001\",\"data\":{\"temp\":10,\"humidity\":200,\"light\":200,\"water\":true,\"air\":180,\"UV\":20},\"portsActive\":1,\"port1\":{\"soilHumidity\":150,\"plant\":\"orchid\",\"lastWatered\":\"16.04.2024 6:00\",\"salt\":20,\"ph\":12,\"error\":\"none\"}}";
+ 
 
-     // Check for the presence of the shield
-  if (WiFi.status() == WL_NO_SHIELD) {
-    Serial.println("WiFi shield not present");
-    while (true); // don't continue
-  }
-
-  // Attempt to connect to Wi-Fi network
-  Serial.print("Attempting to connect to SSID: ");
-  Serial.println(ssid);
-  while (WiFi.status() != WL_CONNECTED) {
-    WiFi.begin(ssid, password);
-    delay(10000); // wait 10 seconds for connection
-  }
-
-  Serial.println("Connected to Wi-Fi");
-  printWifiStatus();
-
-  // Send JSON payloads to servers
-    sendJsonPayload(server, port, route, createJsonData());
-   
-
+  // Send JSON payload to server
+  sendJsonPayload();
+ 
 
        
         send_mess_temp_var = 0;
@@ -317,47 +326,35 @@ void printWifiStatus() {
   Serial.println(ip);
 }
 
-String createJsonData() {
-  StaticJsonDocument<512> jsonDoc;
-  jsonDoc["system"] = "GreenSystemsHome";
-  jsonDoc["hardwareID"] = "000000001";
-  jsonDoc["postID"] = "0000000000001";
-  JsonObject data = jsonDoc.createNestedObject("data");
-  data["temp"] = temp_global;
-  data["humidity"] = hum_global;
-  data["light"] = lux_global;
-  data["water"] = true;
-  data["air"] = air_global;
-  data["UV"] = 20;
-  jsonDoc["portsActive"] = 1;
-  JsonObject port1 = jsonDoc.createNestedObject("port1");
-  port1["soilHumidity"] = 150;
-  port1["plant"] = "orchid";
-  port1["lastWatered"] = "16.04.2024 6:00";
-  port1["salt"] = 20;
-  port1["ph"] = 12;
-  port1["error"] = "none";
-
-  // Serialize JSON to string
-  String jsonString;
-  serializeJson(jsonDoc, jsonString);
-  return jsonString;
-}
-
-String createTelegramJsonPayload(String tg_mesage) {
-  StaticJsonDocument<128> jsonDoc;
-  jsonDoc["tg_message"] = tg_mesage;
-
-  // Serialize JSON to string
-  String jsonString;
-  serializeJson(jsonDoc, jsonString);
-  return jsonString;
-}
-
-void sendJsonPayload(const char* server, int port, const char* route, String jsonString) {
-  WiFiEspClient client;
+void sendJsonPayload() {
   if (client.connect(server, port)) {
     Serial.println("Connected to server");
+
+ // Create JSON object
+    StaticJsonDocument<512> jsonDoc;
+    jsonDoc["system"] = "GreenSystemsHome";
+    jsonDoc["hardwareID"] = "000000001";
+    jsonDoc["postID"] = "0000000000001";
+    JsonObject data = jsonDoc.createNestedObject("data");
+    data["temp"] = temp_global;
+    data["humidity"] = hum_global;
+    data["light"] = lux_global;
+    data["water"] = true;
+    data["air"] = air_global;
+    data["UV"] = 20;
+    jsonDoc["portsActive"] = 1;
+    JsonObject port1 = jsonDoc.createNestedObject("port1");
+    port1["soilHumidity"] = 150;
+    port1["plant"] = "orchid";
+    port1["lastWatered"] = "16.04.2024 6:00";
+    port1["salt"] = 20;
+    port1["ph"] = 12;
+    port1["error"] = "none";
+
+
+    // Serialize JSON to string
+    String jsonString;
+    serializeJson(jsonDoc, jsonString);
 
     // Send HTTP POST request
     client.print("POST /");
@@ -381,6 +378,39 @@ void sendJsonPayload(const char* server, int port, const char* route, String jso
 
     // Disconnect from server
     client.stop();
+    Serial.println("\nDisconnected from server");
+  } else {
+    Serial.println("Connection to server failed");
+  }
+}
+void sendTelegramJsonPayload(String tg_message) {
+  if (newClient.connect(newServer, newPort)) {
+    Serial.println("Connected to server");
+
+ // Create JSON object
+   StaticJsonDocument<128> jsonDocTelegram;
+  jsonDocTelegram["tg_message"] = tg_message;
+
+
+    // Serialize JSON to string
+    String jsonTelegramString;
+    serializeJson(jsonDocTelegram, jsonTelegramString);
+
+    // Send HTTP POST request
+    newClient.print("POST /");
+    newClient.print(newRoute);
+    newClient.println(" HTTP/1.1");
+    newClient.print("Host: ");
+    newClient.println(newServer);
+    newClient.println("Content-Type: application/json");
+    newClient.print("Content-Length: ");
+    newClient.println(jsonTelegramString.length());
+    newClient.println();
+    newClient.println(jsonTelegramString);
+
+   
+    // Disconnect from server
+    newClient.stop();
     Serial.println("\nDisconnected from server");
   } else {
     Serial.println("Connection to server failed");
