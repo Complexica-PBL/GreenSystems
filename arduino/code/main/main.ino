@@ -35,24 +35,24 @@ int water_count=0;
 //const char* ssid = "Cristian’s iPhone 11 Pro Max";
 //const char* password = "multevrei";
 
-const char* ssid = "Acasa";
-const char* password = "069257525";
+const char* ssid = "Marmelad";
+const char* password = "zlatov111";
 
 
 
-char server[] = "192.168.0.80";
-int port = 5004;
-const char* route = "receive";
+char server[] = "192.168.72.115";
+int port = 8000;
+const char* route = "plantdata";
 WiFiEspClient client;
 
-char newServer[] = "192.168.0.80";
+char newServer[] = "192.168.72.160";
 int newPort = 5005;
 const char* newRoute = "telegram";
 WiFiEspClient newClient;
 
 
 
-int send_mess_temp_var_cicle = 3;
+int send_mess_temp_var_cicle = 5;
 int send_mess_temp_var = 0;
 int water_count_cicles=5;
 
@@ -178,6 +178,7 @@ void loop() {
       Serial.println("ALERT [no water]");  // Print alert message
 if(water_count==water_count_cicles-1){
          sendTelegramJsonPayload("[Alert] - No water, please refill");
+           sendJsonPayload(false);
          water_count=0;
       }
       water_count++;
@@ -254,8 +255,6 @@ water_global=true;
 
     if (isnan(t) || isnan(h)) {
       Serial.println("Failed to read from DHT");
-      temp_global=0;
-       hum_global=0;
     } else {
       Serial.print("  -- Humidity: ");
       Serial.print(h);
@@ -297,7 +296,7 @@ send_mess_temp_var++;
  
 
   // Send JSON payload to server
-  sendJsonPayload();
+  sendJsonPayload(true);
  
 
        
@@ -326,20 +325,20 @@ void printWifiStatus() {
   Serial.println(ip);
 }
 
-void sendJsonPayload() {
+void sendJsonPayload(bool water_global_var) {
   if (client.connect(server, port)) {
     Serial.println("Connected to server");
 
  // Create JSON object
     StaticJsonDocument<512> jsonDoc;
     jsonDoc["system"] = "GreenSystemsHome";
-    jsonDoc["hardwareID"] = "000000001";
-    jsonDoc["postID"] = "0000000000001";
+    jsonDoc["hardwareID"] = "103";
+
     JsonObject data = jsonDoc.createNestedObject("data");
     data["temp"] = temp_global;
     data["humidity"] = hum_global;
     data["light"] = lux_global;
-    data["water"] = true;
+    data["water"] = water_global_var;
     data["air"] = air_global;
     data["UV"] = 20;
     jsonDoc["portsActive"] = 1;
@@ -347,8 +346,8 @@ void sendJsonPayload() {
     port1["soilHumidity"] = 150;
     port1["plant"] = "orchid";
     port1["lastWatered"] = "16.04.2024 6:00";
-    port1["salt"] = 20;
-    port1["ph"] = 12;
+    port1["salt"] = 0;
+    port1["ph"] = 0;
     port1["error"] = "none";
 
 
